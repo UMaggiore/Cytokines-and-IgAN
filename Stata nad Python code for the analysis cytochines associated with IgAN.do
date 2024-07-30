@@ -56,6 +56,9 @@ label var iggaa_company2 "IgG autoantibodies against gd-IgA1, ug/ml"
 
 **# Table 1
 
+summ age gender race is raas proteinuria serum_creat egfr serum_alb hematuria mestc m s e t c ///
+iga_elisa gdiga_elisa iggaa_company2
+
 dtable age i.gender i.race i.is i.raas proteinuria serum_creat egfr serum_alb hematuria mestc m s e t c ///
 iga_elisa gdiga_elisa iggaa_company2 ///
 	,   ///	
@@ -64,8 +67,8 @@ iga_elisa gdiga_elisa iggaa_company2 ///
 	define(myiqr = p25 p75, delimiter("-")) ///
 	define(myrange = min max, delimiter("-")) ///
 	factor(gender race is raas, test(fisher)) ///
-	continuous(age proteinuria egfr serum_alb mestc m s e t c, stat(meansd) test(kwallis)) ///
-    continuous(proteinuria serum_creat hematuria iga_elisa gdiga_elisa iggaa_company2, stat(median myiqr) test(kwallis)) ///   
+	continuous(age proteinuria egfr serum_alb , stat(meansd) test(kwallis)) ///
+    continuous(proteinuria serum_creat hematuria mestc m s e t c iga_elisa gdiga_elisa iggaa_company2, stat(median myiqr) test(kwallis)) ///   
 	column(by(hide) test(p-value)) ///
 	title(Table 1. Characteristic of the groups ) ///
 	note(Mann-Whitney test for continuous variables (reported as mean ± standard deviation, or median (interquartile range)), Fisher's exact test for categorical variable) ///
@@ -76,9 +79,9 @@ iga_elisa gdiga_elisa iggaa_company2 ///
     nformat("%3.0f" N count fvfrequency) ///
     nformat("%3.1f" fvpercent ) ///
     nformat("%6.3f" kwallis fisher) ///
-	export(table1.html, replace)
-	collect export Table1.xlsx, replace
-	collect export Table1.docx, replace
+	export(table1_R1.html, replace)
+	collect export Table1_R1.xlsx, replace
+	collect export Table1_R1.docx, replace
 	
 
 **# make univariate test with Holm correction
@@ -148,7 +151,7 @@ dtable $allvars ///
 	define(meansd = mean sd, delimiter(" ± ")) ///
 	define(myiqr = p25 p75, delimiter("-")) ///
 	define(myrange = min max, delimiter("-")) ///
-    continuous($allvars , stat(meansd) test(kwallis)) ///   
+    continuous($allvars , stat(median myiqr) test(kwallis)) ///   
 	column(by(hide) test(p-value)) ///
 	title(Table 1. Difference in cytokines between groups ) ///
 	note(Mann-Whitney test for continuous variables (reported as mean ± standard deviation).) ///
@@ -159,23 +162,23 @@ dtable $allvars ///
     nformat("%3.0f" N count fvfrequency) ///
     nformat("%3.1f" fvpercent ) ///
     nformat("%6.3f" kwallis fisher) ///
-	export(table2.html, replace)
-collect export Table2.xlsx, replace
-collect export Table2.docx, replace
+	export(table2_1.html, replace)
+collect export Table2_R1.xlsx, replace
+collect export Table2_R1.docx, replace
 
 
 
 preserve
-import excel "C:\Documenti\Alibrandi\IgA ELISA ZORN\Cytochines Cravedi\Table2.xlsx", sheet("Sheet1") cellrange(A3:E81) firstrow clear
+import excel "C:\Documenti\Alibrandi\IgA ELISA ZORN\Cytochines Cravedi\Table2_R1.xlsx", sheet("Sheet1") cellrange(A3:E81) firstrow clear
 rename N cytokine
 sort cytokine
-cap save table2, replace
+cap save table2_R1, replace
 clear
 import delimited "C:\Documenti\Alibrandi\IgA ELISA ZORN\Cytochines Cravedi\cytokine_adjusted_holm.csv"
 sort cytokine
 cap save holm, replace
 clear
-use table2
+use table2_R1
 merge 1:1 cytokine using holm
 drop _merge
 gsort -chi2
@@ -188,7 +191,7 @@ drop pval
 format adjpval %5.4f
 rename adjpval Adjpval
 rename sig Significant
-export excel _all using "Table2_sorted", firstrow(variables) replace
+export excel _all using "Table2_sorted_R1", firstrow(variables) replace
 restore
 
 
@@ -279,7 +282,7 @@ g.add_legend(title= "")
 plt.subplots_adjust(bottom=0.2, left=0.2)
 g.fig.supxlabel('NPX, Normalized Protein eXpression', x=0.5, y=0.038, size = 14)
 g.fig.supylabel('NPX, Normalized Protein eXpression', x=0.048, y=0.5, size = 14)
-plt.savefig('Figure1A.tif', dpi=1200)
+plt.savefig('Figure1A_R1.tif', dpi=900)
 plt.show()
 end
 
@@ -352,22 +355,24 @@ ax.view_init(-140, 60)
 
 
 # savefig specifies the DPI for the saved figure 
-plt.savefig('Figure1B.tif', dpi=1200)
+plt.savefig('Figure1B_R1.tif', dpi=900)
 plt.show()
 
 end
 
 
-**# fit multivariable logistic model with
+**# fit multivariable logistic model with selected vars 
 cd "C:\Documenti\Alibrandi\IgA ELISA ZORN\Cytochines Cravedi"
 use IgANcytochines, clear
-	
+summ $selected_var
+
+* center the variables	
 foreach var of varlist $selected_var  {
 	 qui summ  `var'
 	 qui replace `var' = (`var' - r(mean)) / r(sd)
 	 }
 
-	 
+
 di "$selected_var"
 
 
@@ -402,6 +407,13 @@ cvauroc group $selected_var, seed(123)
 
 **# check 95%CI and P values
 qui logit group $selected_var
+etable,                             ///
+        cstat(_r_b, nformat(%4.2f))                       ///
+        cstat(_r_ci, cidelimiter(,) nformat(%6.2f))       ///
+        showstars showstarsnote                           /// 
+        stars(.05 "*" .01 "**" .001 "***", attach(_r_b))  ///
+        mstat(N) mstat(aic) mstat(bic)                    ///
+        mstat(pseudo_r2 = e(r2_p))
 lincom IL6, or cformat(%3.2f) pformat(%4.3f) sformat(%3.2f)
 lincom IL12B, or cformat(%3.2f) pformat(%4.3f) sformat(%3.2f)
 lincom CX3CL1, or cformat(%3.2f) pformat(%4.3f) sformat(%3.2f)
@@ -436,6 +448,98 @@ cap graph export Figure2.png, replace
 cap graph export Figure2.pdf, replace 
 
 **# clinical and lab correlation with cytokines in the multivariable model
+
+**# Matrix graph ggally (PairGrid from seaborn) in Python selected vars /clincal
+preserve
+clear
+import excel "C:\Documenti\Sara Albrandi\Olink_IgAN_clean.xlsx", sheet("Olink + baseline") firstrow
+cd "C:\Documenti\Alibrandi\IgA ELISA ZORN\Cytochines Cravedi"
+keep cx3cl1 il12b il6 egfr serum_alb proteinuria
+order cx3cl1 il12b il6 egfr serum_alb proteinuria
+label var cx3cl1 "CX3CL1, NPX"
+label var il12b "IL-12β, NPX"
+label var il6 "IL-6, NPX"
+label var egfr "eGFR, ml/min/1.73m{sup:2}"
+label var serum_alb "Serum Albumin, g/dl"
+label var proteinuria "Proteinuria, g/day"
+graph matrix cx3cl1 il12b il6 egfr serum_alb proteinuria, half
+export excel _all using "clincial_correlations", firstrow(variables) nolabel replace
+export delimited _all using clinical_correlations, nolabel quote replace
+restore
+
+
+cd "C:\Documenti\Alibrandi\IgA ELISA ZORN\Cytochines Cravedi"
+python:
+import seaborn as sns
+import pandas as pd
+import matplotlib.pyplot as plt
+# change font
+plt.rcParams['font.family'] = "Arial"
+df = pd.read_csv("clinical_correlations.csv")
+df.dropna(inplace=True)
+df = df.rename(columns = {"cx3cl1": "CX3CL1, NPX", "il12b": "IL-12B, NPX", "il6": "IL-6, NPX", "egfr": "eGFR, ml/min/1.73m$^{2}$", "serum_alb": "sAlbumin, g/dl", "proteinuria": "Proteinuria, g/day"}) 
+
+plt.rcParams["axes.labelsize"] = 13
+
+g = sns.PairGrid(df, diag_sharey=False, corner=True)
+g.map_diag(sns.histplot, color = '#ff3939', alpha = 0.50, bins = 12, kde = True, element="step", stat="density")
+g.map_offdiag(sns.scatterplot, s = 150, c='#ff3939', edgecolor = 'white', linewidth=1.8, marker='o', alpha = 0.85)
+
+# g = sns.PairGrid(df, hue="group" , palette=['#2986cd', '#ff3939'])
+# g.map_diag(sns.histplot, kde = True, element="step", stat="density")
+# g.map_offdiag(sns.scatterplot, s=150, alpha=0.85)
+# g.add_legend(title= "")
+# plt.subplots_adjust(bottom=0.2, left=0.2)
+# g.fig.supxlabel('NPX, Normalized Protein eXpression', x=0.5, y=0.038, size = 14)
+# g.fig.supylabel('NPX, Normalized Protein eXpression', x=0.048, y=0.5, size = 14)
+plt.savefig('Figure_new.tif', dpi=900)
+plt.show()
+end
+
+
+**# compute associated matrix of Spearman's rak correlation and P values  
+preserve
+clear
+import delimited "C:\Documenti\Alibrandi\IgA ELISA ZORN\Cytochines Cravedi\clinical_correlations.csv"
+*tab group
+* keep if group == 1
+order cx3cl1 il12b il6 egfr serum_alb proteinuria
+local vars "cx3cl1 il12b il6 egfr serum_alb proteinuria"
+cap drop nmiss
+egen nmiss = rowmiss(`vars')
+local n_vars: word count `vars'
+matrix rho = J(`n_vars',`n_vars',-99)
+matrix pval = J(`n_vars',`n_vars',-99)
+matrix npts = J(`n_vars',`n_vars',-99)
+local i=0
+foreach v in `vars' {
+           local i= `i' +1
+           local j=0
+           foreach w in `vars'  {
+                   local j= `j'+1
+           qui spearman `v' `w' if nmiss==0
+           matrix rho[`i',`j'] = r(rho)
+		   matrix pval[`i',`j'] = r(p)
+		   matrix npts[`i',`j'] = r(N)	   
+		   matrix rho[`i',`i'] = .
+		   matrix pval[`i',`i'] = .
+		   matrix npts[`i',`i'] = .
+           }
+   }
+
+unab vars : `vars'
+matrix rownames rho= `vars'
+matrix colnames rho= `vars'
+matrix rownames pval= `vars'
+matrix colnames pval= `vars'
+matrix rownames npts= `vars'
+matrix colnames npts= `vars'
+matrix list rho,  format(%4.3f)
+matrix list pval, format(%4.3f)
+
+
+
+
 clear
 import excel "C:\Documenti\Sara Albrandi\Olink_IgAN_clean.xlsx", sheet("Olink + baseline") firstrow
 
@@ -507,7 +611,7 @@ graph export Figure3.pdf, replace
 			
 **# additional correlations 
 * Iga, gdIgA, and IgG anti gd-IgA between them and with screat, proteinuria, and eGFR
-foreach var of varlist 
+* foreach var of varlist 
 
 **# compute matrix of Spearman's rak correlation and P values
 preserve
@@ -561,6 +665,74 @@ restore
 clear
 import delimited "C:\Documenti\Alibrandi\IgA ELISA ZORN\Cytochines Cravedi\other_correlations.csv
 
+**# Matrix graph ggally (PairGrid from seaborn) in Python
+cd "C:\Documenti\Alibrandi\IgA ELISA ZORN\Cytochines Cravedi"
+python:
+import seaborn as sns
+import pandas as pd
+import matplotlib.pyplot as plt
+# change font
+plt.rcParams['font.family'] = "Arial"
+df = pd.read_csv("other_correlations.csv")
+df.dropna(inplace=True)
+df = df.rename(columns = {"Proteinuria": "UProt, g/day", "SCreat": "SCreat, mg/dL", "eGFR": "eGFR, ml/min/1.73m$^{2}$", "IgA": "IgA, ug/ml", "gdIgA1": "gd-IgA1, ug/ml", "IgGantigdIgA1": "IgG anti-gd-IgA1, ug/ml"}) 
+
+plt.rcParams["axes.labelsize"] = 13
+
+g = sns.PairGrid(df, diag_sharey=False, corner=True)
+g.map_diag(sns.histplot, color = '#ff3939', alpha = 0.50, bins = 12, kde = True, element="step", stat="density")
+g.map_offdiag(sns.scatterplot, s = 150, c='#ff3939', edgecolor = 'white', linewidth=1.8, marker='o', alpha = 0.85)
+
+# g = sns.PairGrid(df, hue="group" , palette=['#2986cd', '#ff3939'])
+# g.map_diag(sns.histplot, kde = True, element="step", stat="density")
+# g.map_offdiag(sns.scatterplot, s=150, alpha=0.85)
+# g.add_legend(title= "")
+# plt.subplots_adjust(bottom=0.2, left=0.2)
+# g.fig.supxlabel('NPX, Normalized Protein eXpression', x=0.5, y=0.038, size = 14)
+# g.fig.supylabel('NPX, Normalized Protein eXpression', x=0.048, y=0.5, size = 14)
+plt.savefig('Figure4_R1.tif', dpi=900)
+plt.show()
+end
+
+
+**# Matrix graph ggally (PairGrid from seaborn) in Python
+cd "C:\Documenti\Alibrandi\IgA ELISA ZORN\Cytochines Cravedi"
+python:
+import seaborn as sns
+import pandas as pd
+import matplotlib.pyplot as plt
+# change font
+plt.rcParams['font.family'] = "Arial"
+df = pd.read_csv("other_correlations.csv")
+df.dropna(inplace=True)
+df = df.rename(columns = {"Proteinuria": "UProt, g/day", "SCreat": "SCreat, mg/dL", "eGFR": "eGFR, ml/min/1.73m$^{2}$", "IgA": "IgA, ug/ml", "gdIgA1": "gd-IgA1, ug/ml", "IgGantigdIgA1": "IgG anti-gd-IgA1, ug/ml"}) 
+
+plt.rcParams["axes.labelsize"] = 13
+"""
+g = sns.jointplot(df, x='IgG anti-gd-IgA1, ug/ml', y ='eGFR, ml/min/1.73m$^{2}$', kind = 'reg', scatter_kws= {'color':'#ff3939', 'edgecolor':'white', 'alpha' : 0.50, 's': 80}, line_kws= {'color':'#ff3939'}, marginal_kws= {'color':'#ff3939', 'bins': 10})
+g.ax_joint.set_yticks([0,15,30,45,60,90,120,150])
+
+plt.savefig('Figure_eGFR_anti-gd-IgA1_R1.tif', dpi=900)
+plt.show()
+"""
+
+g = sns.jointplot(df, x='IgA, ug/ml', y ='eGFR, ml/min/1.73m$^{2}$', kind = 'reg', scatter_kws= {'color':'#ff3939', 'edgecolor':'white', 'alpha' : 0.50, 's': 80}, line_kws= {'color':'#ff3939'}, marginal_kws= {'color':'#ff3939', 'bins': 10})
+g.ax_joint.set_yticks([0,15,30,45,60,90,120,150])
+g.ax_joint.grid(True, lw = 0.9, ls = '--', c = '.75', alpha = 0.5)
+g.ax_joint.set_xlabel(r'IgA $\mu \$g/ml')
+g.ax_joint.text(9000, 95, r'$\rho \$ = -0.339; P=0.020', fontsize = 12) 
+
+
+plt.savefig('Figure_eGFR_IgA_R1.tif', dpi=300)
+plt.show()
+
+"""
+g = sns.jointplot(df, x='IgG anti-gd-IgA1, ug/ml', y ='IgA, ug/ml', kind = 'reg', scatter_kws= {'color':'#ff3939', 'edgecolor':'white', 'alpha' : 0.50, 's': 80}, line_kws= {'color':'#ff3939'}, marginal_kws= {'color':'#ff3939', 'bins': 10})
+
+
+plt.savefig('Figure_anti-gd-IgA1_IgA_R1.tif', dpi=900)
+plt.show()
+"""
 
 end
 
